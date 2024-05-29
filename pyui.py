@@ -24,7 +24,7 @@ class Imgui:
     # endregino
 
     # region EVMConfigWindow
-
+    channels: list[str] = ["Y", "I", "Q"]
     evmVideoImportFlag: bool = False
     frames: list[np.ndarray] = []
     fps: int = 0
@@ -36,21 +36,22 @@ class Imgui:
         dpg.set_value("InputPath", data["file_path_name"])
         videoCap = cv2.VideoCapture(data["file_path_name"])
         temp: int = int(videoCap.get(cv2.CAP_PROP_FRAME_COUNT)) - 1
-        dpg.configure_item("FrameRange", max_value=temp)
-        dpg.set_value("FrameRange", (0, temp, 0, 0))
+        dpg.configure_item("FrameRange_SliderIntx", max_value=temp)
+        dpg.set_value("FrameRange_SliderIntx", (0, temp, 0, 0))
 
     def __EVMLoadVideoCallback(self, sender, data):
         if dpg.get_value("InputPath") == "Path Null":
             return
-
+        dpg.show_item("Load_LoadingIndicator")
         self.frames = []
         self.fps = 0
         self.fps, self.frames = evm.getVideoFrames(
             dpg.get_value("InputPath"),
-            dpg.get_value("FrameRange")[0],
-            dpg.get_value("FrameRange")[1],
+            dpg.get_value("FrameRange_SliderIntx")[0],
+            dpg.get_value("FrameRange_SliderIntx")[1],
         )
         self.imgPyramids = evm.buildVideoLapPyr(self.frames, dpg.get_value("Maxlevel"))
+        dpg.hide_item("Load_LoadingIndicator")
         print("Done")
 
     def __EVMShowSignalCallback(self):
@@ -59,31 +60,27 @@ class Imgui:
             for t in range(self.imgPyramids[dpg.get_value("Maxlevel") - 1].shape[0])
         ]
         temp = []
-        for i in range(0, 3):
+        for i in range(3):
             temp.append([])
         for i in range(len(self.frames)):
             for j in range(0, 3):
                 temp[j].append(
                     self.imgPyramids[0][
                         i,
-                        dpg.get_value("PixelLocate")[1],
-                        dpg.get_value("PixelLocate")[0],
+                        dpg.get_value("PixelLocate_DragIntx")[1],
+                        dpg.get_value("PixelLocate_DragIntx")[0],
                         j,
                     ]
                 )
-        dpg.set_value("YSignal", [tlist, temp[0]])
-        dpg.set_value("ISignal", [tlist, temp[1]])
-        dpg.set_value("QSignal", [tlist, temp[2]])
-        dpg.fit_axis_data("YYAxis")
-        dpg.fit_axis_data("IYAxis")
-        dpg.fit_axis_data("QYAxis")
-        dpg.fit_axis_data("YXAxis")
-        dpg.fit_axis_data("IXAxis")
-        dpg.fit_axis_data("QXAxis")
+        for i in range(3):
+            dpg.set_value(f"{self.channels[i]}Signal_LineSeries", [tlist, temp[i]])
+            dpg.fit_axis_data(f"{self.channels[i]}YAxis")
+            dpg.fit_axis_data(f"{self.channels[i]}XAxis")
 
         dpg.show_item("YIQSignal")
 
     def __EVMShowFilteredSignalCallback(self):
+        dpg.show_item("ShowFiltered_LoadingIndicator")
         self.filteredPyramids = evm.idealFilterForVideoPyr(
             self.imgPyramids,
             dpg.get_value("FrequencyRangeTemp")[0],
@@ -102,21 +99,17 @@ class Imgui:
                 temp[j].append(
                     self.filteredPyramids[0][
                         i,
-                        dpg.get_value("PixelLocate")[1],
-                        dpg.get_value("PixelLocate")[0],
+                        dpg.get_value("PixelLocate_DragIntx")[1],
+                        dpg.get_value("PixelLocate_DragIntx")[0],
                         j,
                     ]
                 )
-        dpg.set_value("FYSignal", [tlist, temp[0]])
-        dpg.set_value("FISignal", [tlist, temp[1]])
-        dpg.set_value("FQSignal", [tlist, temp[2]])
-        dpg.fit_axis_data("FYYAxis")
-        dpg.fit_axis_data("FIYAxis")
-        dpg.fit_axis_data("FQYAxis")
-        dpg.fit_axis_data("FYXAxis")
-        dpg.fit_axis_data("FIXAxis")
-        dpg.fit_axis_data("FQXAxis")
+        for i in range(3):
+            dpg.set_value(f"F{self.channels[i]}Signal_LineSeries", [tlist, temp[i]])
+            dpg.fit_axis_data(f"F{self.channels[i]}YAxis")
+            dpg.fit_axis_data(f"F{self.channels[i]}XAxis")
 
+        dpg.hide_item("ShowFiltered_LoadingIndicator")
         dpg.show_item("YIQFilteredSignal")
 
     def __ShowEVMConfigWindow(self):
@@ -124,7 +117,7 @@ class Imgui:
             directory_selector=False,
             show=False,
             callback=self.__EVMFileDialogConfirmCallback,
-            tag="MP4FileDialog",
+            tag="FindMP4_FileDialog",
             width=700,
             height=400,
         ):
@@ -133,10 +126,13 @@ class Imgui:
         with dpg.window(label="EVM", width=500, height=400):
             with dpg.collapsing_header(label="Load", default_open=True):
                 dpg.add_button(
-                    label="Import", callback=lambda: dpg.show_item("MP4FileDialog")
+                    label="Import", callback=lambda: dpg.show_item("FindMP4_FileDialog")
                 )
-                dpg.add_same_line()
-                dpg.add_text(tag="InputPath", default_value="Path Null")
+                dpg.add_text(tag="InputPath", default_value="Path: Null")
+                dpg.add_text(tag="FPS_Text", default_value="FPS: Path Null")
+                dpg.add_text(
+                    tag="FrameCount_Text", default_value="Frame Count: Path Null"
+                )
                 dpg.add_slider_intx(
                     size=2,
                     max_value=0,
@@ -144,7 +140,7 @@ class Imgui:
                     default_value=(0, 0, 0, 0),
                     label="FrameRange",
                     callback=self.__PrintValueCallback,
-                    tag="FrameRange",
+                    tag="FrameRange_SliderIntx",
                 )
                 dpg.add_input_int(
                     tag="Maxlevel",
@@ -152,60 +148,40 @@ class Imgui:
                     label="Maxlevel",
                 )
                 dpg.add_button(label="Load", callback=self.__EVMLoadVideoCallback)
+                dpg.add_same_line()
+                dpg.add_loading_indicator(tag="Load_LoadingIndicator", show=False)
             with dpg.collapsing_header(label="Analyse"):
                 dpg.add_drag_intx(
                     size=2,
                     min_value=0,
                     default_value=(240, 180, 0, 0),
                     label="PixelLocate",
-                    tag="PixelLocate",
+                    tag="PixelLocate_DragIntx",
                     callback=self.__PrintValueCallback,
                 )
                 dpg.add_button(label="ShowPlot", callback=self.__EVMShowSignalCallback)
                 with dpg.table(tag="YIQSignal", header_row=False, show=False):
-                    dpg.add_table_column()
-                    dpg.add_table_column()
-                    dpg.add_table_column()
+                    for _ in range(3):
+                        dpg.add_table_column()
                     with dpg.table_row():
-                        with dpg.plot(label="Y", width=-1):
-                            dpg.add_plot_axis(
-                                dpg.mvXAxis, label="Time(ms)", tag="YXAxis"
-                            )
-                            dpg.add_plot_axis(
-                                dpg.mvYAxis, label="PixelValue", tag="YYAxis"
-                            )
-                            dpg.add_line_series(
-                                x=[],
-                                y=[],
-                                parent="YYAxis",
-                                tag="YSignal",
-                            )
-                        with dpg.plot(label="I", width=-1):
-                            dpg.add_plot_axis(
-                                dpg.mvXAxis, label="Time(ms)", tag="IXAxis"
-                            )
-                            dpg.add_plot_axis(
-                                dpg.mvYAxis, label="PixelValue", tag="IYAxis"
-                            )
-                            dpg.add_line_series(
-                                x=[],
-                                y=[],
-                                parent="IYAxis",
-                                tag="ISignal",
-                            )
-                        with dpg.plot(label="Q", width=-1):
-                            dpg.add_plot_axis(
-                                dpg.mvXAxis, label="Time(ms)", tag="QXAxis"
-                            )
-                            dpg.add_plot_axis(
-                                dpg.mvYAxis, label="PixelValue", tag="QYAxis"
-                            )
-                            dpg.add_line_series(
-                                x=[],
-                                y=[],
-                                parent="QYAxis",
-                                tag="QSignal",
-                            )
+                        for i in range(3):
+                            with dpg.plot(label=self.channels[i], width=-1):
+                                dpg.add_plot_axis(
+                                    dpg.mvXAxis,
+                                    label="Time(ms)",
+                                    tag=f"{self.channels[i]}XAxis",
+                                )
+                                dpg.add_plot_axis(
+                                    dpg.mvYAxis,
+                                    label="PixelValue",
+                                    tag=f"{self.channels[i]}YAxis",
+                                )
+                                dpg.add_line_series(
+                                    x=[],
+                                    y=[],
+                                    parent=f"{self.channels[i]}YAxis",
+                                    tag=f"{self.channels[i]}Signal_LineSeries",
+                                )
                 dpg.add_slider_floatx(
                     size=2,
                     min_value=0,
@@ -218,6 +194,8 @@ class Imgui:
                     label="ShowFilteredSignal",
                     callback=self.__EVMShowFilteredSignalCallback,
                 )
+                dpg.add_same_line()
+                dpg.add_loading_indicator(tag="ShowFilter_LoadingIndicator", show=False)
                 with dpg.table(tag="YIQFilteredSignal", header_row=False, show=False):
                     dpg.add_table_column()
                     dpg.add_table_column()
@@ -234,7 +212,7 @@ class Imgui:
                                 x=[],
                                 y=[],
                                 parent="FYYAxis",
-                                tag="FYSignal",
+                                tag="FYSignal_LineSeries",
                             )
                         with dpg.plot(label="I", width=-1):
                             dpg.add_plot_axis(
@@ -247,7 +225,7 @@ class Imgui:
                                 x=[],
                                 y=[],
                                 parent="FIYAxis",
-                                tag="FISignal",
+                                tag="FISignal_LineSeries",
                             )
                         with dpg.plot(label="Q", width=-1):
                             dpg.add_plot_axis(
@@ -260,7 +238,7 @@ class Imgui:
                                 x=[],
                                 y=[],
                                 parent="FQYAxis",
-                                tag="FQSignal",
+                                tag="FQSignal_LineSeries",
                             )
 
             with dpg.collapsing_header(label="Export"):
@@ -270,10 +248,10 @@ class Imgui:
                     default_value=(0, 0, 0, 0),
                     label="FrequencyRange",
                     callback=self.__PrintValueCallback,
-                    tag="FrequencyRange",
+                    tag="FrequencyRange_SliderFloatx",
                 )
                 dpg.add_input_float(
-                    tag="AmplificationRate",
+                    tag="AmplificationRate_InputFloat",
                     label="AmplificationRate",
                     default_value=150,
                     callback=self.__PrintValueCallback,
@@ -291,7 +269,7 @@ class Imgui:
                 dpg.add_menu_item(label="About Imgui", callback=dpg.show_about)
                 dpg.add_menu_item(label="Performance", callback=dpg.show_metrics)
 
-    def __init__(self, w: int = 800, h: int = 600) -> None:
+    def __init__(self, w: int = 800, h: int = 600):
         dpg.create_context()
         dpg.create_viewport(title="MotionEnhanceToolBox", width=w, height=h)
         dpg.configure_app(docking=True, docking_space=True)
